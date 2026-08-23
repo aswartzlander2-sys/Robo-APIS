@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Robo Network Finder</title>
+  <link rel="icon" type="image/png" href="robo-logo.png" />
+  <link rel="stylesheet" href="tailwind.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="runtime-config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body class="min-h-screen bg-white text-gray-900 dark:bg-neutral-950 dark:text-gray-100 transition-colors duration-300">
+
+  <div class="max-w-6xl mx-auto p-3 sm:p-6 md:p-10">
+
+    <header class="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8 flex-wrap">
+      <img src="robo-logo.png" alt="Robo Logo" class="w-10 h-10 sm:w-14 sm:h-14 rounded-xl shadow" />
+      <h1 class="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Robo Network Finder</h1>
+    </header>
+
+    <!-- Row 1: Network + IP Geolocation -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-3 sm:mb-6">
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">Network</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>Online:</dt><dd><span id="nw-online">—</span> <button id="upd-network" class="upd-btn" type="button">Update</button></dd>
+            <dt>Connection Type:</dt><dd id="nw-type">—</dd>
+            <dt>Effective Type:</dt><dd id="nw-effective">—</dd>
+            <dt>Downlink:</dt><dd id="nw-downlink">—</dd>
+            <dt>Downlink Max:</dt><dd id="nw-downmax">—</dd>
+            <dt>RTT:</dt><dd id="nw-rtt">—</dd>
+            <dt>Save Data:</dt><dd id="nw-save">—</dd>
+            <dt>Protocol:</dt><dd id="nw-protocol">—</dd>
+            <dt>Host:</dt><dd id="nw-host">—</dd>
+            <dt>Secure Context:</dt><dd id="nw-secure">—</dd>
+            <dt>Public IP:</dt><dd><span id="nw-ip">—</span> <button id="upd-ip" class="upd-btn" type="button">Update</button></dd>
+            <dt>Public IPv4:</dt><dd><span id="nw-ipv4">—</span> <button id="btn-ipv4" class="req-btn" type="button">Click to Request</button></dd>
+            <dt>Public IPv6:</dt><dd><span id="nw-ipv6">—</span> <button id="btn-ipv6" class="req-btn" type="button">Click to Request</button></dd>
+            <dt>Local IPs (LAN):</dt><dd><span id="op-webrtc">—</span> <button id="btn-webrtc" class="req-btn" type="button">Click to Request</button></dd>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">IP Geolocation</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>Country:</dt><dd id="ip-country">—</dd>
+            <dt>Region:</dt><dd id="ip-region">—</dd>
+            <dt>City:</dt><dd id="ip-city">—</dd>
+            <dt>Postal:</dt><dd id="ip-postal">—</dd>
+            <dt>Latitude:</dt><dd id="ip-lat">—</dd>
+            <dt>Longitude:</dt><dd id="ip-lon">—</dd>
+            <dt>ISP / Org:</dt><dd id="ip-org">—</dd>
+            <dt>ASN:</dt><dd id="ip-asn">—</dd>
+            <dt>IP Timezone:</dt><dd id="ip-tz">—</dd>
+            <dt>Timezone Match:</dt><dd id="ip-match">—</dd>
+            <dt>Address Family:</dt><dd id="ip-family">—</dd>
+            <dt>Address Scope:</dt><dd id="ip-scope">—</dd>
+            <dt>Observed Via:</dt><dd id="ip-via">—</dd>
+            <dt>Local Data File:</dt><dd id="ip-data-file">—</dd>
+            <dt>Local Data Match:</dt><dd id="ip-data-match">—</dd>
+            <dt>Precise GPS:</dt><dd><span id="op-geo">—</span> <button id="btn-geo" class="req-btn" type="button">Click to Request</button></dd>
+          </dl>
+          <p id="offline-note" class="text-xs text-gray-500 dark:text-gray-400 mt-3">Standalone mode: the app calls only this server. Add a local <code>ip-data.local.json</code> file to this folder for offline ISP and IP-location results.</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- Row 2: Transport + Page Network Timing -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-3 sm:mb-6">
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">Transport &amp; Request</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>Network API:</dt><dd id="tr-network-api">—</dd>
+            <dt>Next Hop Protocol:</dt><dd id="tr-next-hop">—</dd>
+            <dt>Navigation Type:</dt><dd id="tr-nav-type">—</dd>
+            <dt>Redirect Count:</dt><dd id="tr-redirects">—</dd>
+            <dt>Page Protocol:</dt><dd id="tr-page-protocol">—</dd>
+            <dt>Secure Context:</dt><dd id="tr-secure-context">—</dd>
+            <dt>Server HTTP:</dt><dd id="tr-server-http">—</dd>
+            <dt>Server Encrypted:</dt><dd id="tr-server-encrypted">—</dd>
+            <dt>Request Seen:</dt><dd id="tr-seen">—</dd>
+            <dt>Page Transfer:</dt><dd id="tr-transfer">—</dd>
+            <dt>Encoded Body:</dt><dd id="tr-encoded">—</dd>
+            <dt>Decoded Body:</dt><dd id="tr-decoded">—</dd>
+            <dt>Resource Count:</dt><dd id="tr-resource-count">—</dd>
+            <dt>Browser Timezone:</dt><dd id="tr-timezone">—</dd>
+            <dt>Browser Locale:</dt><dd id="tr-locale">—</dd>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">Page Network Timing</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>DNS Lookup:</dt><dd id="tm-dns">—</dd>
+            <dt>TCP Connect:</dt><dd id="tm-tcp">—</dd>
+            <dt>TLS Handshake:</dt><dd id="tm-tls">—</dd>
+            <dt>Request Phase:</dt><dd id="tm-request">—</dd>
+            <dt>Response / TTFB:</dt><dd id="tm-ttfb">—</dd>
+            <dt>DOM Interactive:</dt><dd id="tm-dom-interactive">—</dd>
+            <dt>DOM Complete:</dt><dd id="tm-dom-complete">—</dd>
+            <dt>DOMContentLoaded:</dt><dd id="tm-dom-content">—</dd>
+            <dt>Load Event:</dt><dd id="tm-load">—</dd>
+            <dt>Page Duration:</dt><dd id="tm-duration">—</dd>
+            <dt>Latest Server RTT:</dt><dd id="tm-latest-rtt">—</dd>
+            <dt>Median Server RTT:</dt><dd id="tm-median-rtt">—</dd>
+            <dt>Sample Spread:</dt><dd id="tm-spread">—</dd>
+            <dt>Successful Samples:</dt><dd><span id="tm-success">—</span> <button id="btn-latency" class="req-btn" type="button">Click to Request</button></dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <!-- Row 3: Local Network + Standalone Data -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-6 mb-3 sm:mb-6">
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">Local Network &amp; Location</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>WebRTC:</dt><dd id="ln-webrtc">—</dd>
+            <dt>Local IPv4:</dt><dd><span id="ln-ipv4">—</span> <button id="btn-lan-ipv4" class="req-btn" type="button">Click to Request</button></dd>
+            <dt>Local IPv6:</dt><dd><span id="ln-ipv6">—</span> <button id="btn-lan-ipv6" class="req-btn" type="button">Click to Request</button></dd>
+            <dt>mDNS Hostnames:</dt><dd><span id="ln-mdns">—</span> <button id="btn-lan-mdns" class="req-btn" type="button">Click to Request</button></dd>
+            <dt>All Host Candidates:</dt><dd id="ln-all">—</dd>
+            <dt>IPv4 Candidate Count:</dt><dd id="ln-ipv4-count">—</dd>
+            <dt>IPv6 Candidate Count:</dt><dd id="ln-ipv6-count">—</dd>
+            <dt>mDNS Candidate Count:</dt><dd id="ln-mdns-count">—</dd>
+            <dt>Geolocation API:</dt><dd id="ln-geo-api">—</dd>
+            <dt>Geolocation Permission:</dt><dd id="ln-geo-permission">—</dd>
+            <dt>GPS Captured:</dt><dd id="ln-geo-captured">—</dd>
+            <dt>GPS Accuracy:</dt><dd id="ln-geo-accuracy">—</dd>
+            <dt>Precise GPS:</dt><dd><span id="ln-geo-request">—</span> <button id="btn-geo-local" class="req-btn" type="button">Click to Request</button></dd>
+          </dl>
+        </div>
+      </section>
+
+      <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+        <h2 class="text-lg font-semibold mb-4">Standalone IP Data</h2>
+        <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800">
+          <dl class="kv">
+            <dt>External Services:</dt><dd id="st-external">—</dd>
+            <dt>IP Source:</dt><dd id="st-ip-source">—</dd>
+            <dt>Profile Endpoint:</dt><dd id="st-profile-endpoint">—</dd>
+            <dt>IPv4 Endpoint:</dt><dd id="st-ipv4-endpoint">—</dd>
+            <dt>IPv6 Endpoint:</dt><dd id="st-ipv6-endpoint">—</dd>
+            <dt>Latency Endpoint:</dt><dd id="st-latency-endpoint">—</dd>
+            <dt>Local Data Status:</dt><dd id="st-data-status">—</dd>
+            <dt>Local Data File:</dt><dd id="st-data-file">—</dd>
+            <dt>Record Count:</dt><dd id="st-record-count">—</dd>
+            <dt>Matched CIDR:</dt><dd id="st-matched-cidr">—</dd>
+            <dt>IP Data Family:</dt><dd id="st-data-family">—</dd>
+            <dt>IP Database Type:</dt><dd id="st-data-type">—</dd>
+            <dt>Address Check:</dt><dd id="st-address-check">—</dd>
+            <dt>Last Profile Check:</dt><dd id="st-last-check">—</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+
+    <!-- All Details (JSON) -->
+    <section class="card bg-gray-100 dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-sm">
+      <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <h2 class="text-lg font-semibold">All Details (JSON)</h2>
+        <div class="flex gap-2 flex-wrap">
+          <button id="json-copy" class="action-btn" type="button">Copy</button>
+          <button id="json-download" class="action-btn" type="button">Download</button>
+        </div>
+      </div>
+      <div class="inner bg-white dark:bg-neutral-950/60 border border-gray-200 dark:border-neutral-800 max-h-96 overflow-auto">
+<pre class="text-xs sm:text-sm leading-relaxed"><code id="json-output">Loading…</code></pre>
+      </div>
+    </section>
+
+  </div>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a2fdcdbfb8f39698',t:'MTc4NzUyNjc2Mw=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
