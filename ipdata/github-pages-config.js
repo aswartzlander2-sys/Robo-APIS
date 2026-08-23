@@ -1,9 +1,7 @@
 // This file is copied to the GitHub Pages artifact as runtime-config.js.
-// Keep static mode for GitHub Pages. The public IP buttons use the Robo IP API
-// below; that API must return Access-Control-Allow-Origin: * (or this Pages
-// origin). Set mode to 'api' plus apiBase for the full self-hosted dashboard API.
+// The Worker returns the connecting visitor's real public IP with CORS enabled.
 window.ROBO_NETWORK_CONFIG = Object.freeze({
-  mode: 'static', // 'static' | 'api'
+  mode: 'static',
   apiBase: '',
-  publicIpEndpoint: 'https://apis.robo-universe.com/ipdata'
+  publicIpEndpoint: 'https://ipdata.swartzlander.workers.dev/ipdata'
 });
