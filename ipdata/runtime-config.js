@@ -1,7 +1,7 @@
-// Default runtime configuration. Local Node use remains automatic on localhost.
-// Public/custom-domain deployments use the Cloudflare Worker for real IP data.
+// GitHub Pages /ipdata deployment configuration.
+// GitHub Pages is static, so public IP data comes from the deployed Worker.
 window.ROBO_NETWORK_CONFIG = Object.freeze({
-  mode: 'auto', // local Node on localhost; static Worker mode on public hosts
+  mode: 'static',
   apiBase: '',
   publicIpEndpoint: 'https://ipdata.swartzlander.workers.dev/ipdata'
 });
