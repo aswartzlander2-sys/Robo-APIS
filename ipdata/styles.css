@@ -1,0 +1,253 @@
+html, body { font-family: 'Helvetica', 'Helvetica Neue', Arial, sans-serif; overflow-x: hidden; }
+    * { min-width: 0; box-sizing: border-box; }
+    /* Baseline styles that work with or without Tailwind. If the Tailwind CDN
+       fails to load on mobile (slow/blocked network), the page still renders. */
+    body { margin: 0; background: #fff; color: #1a1a1a; min-height: 100vh; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0a0a0a; color: #f3f4f6; }
+    }
+    body > div { max-width: 72rem; margin: 0 auto; padding: 0.75rem; }
+    @media (min-width: 640px) { body > div { padding: 1.5rem; } }
+    @media (min-width: 768px) { body > div { padding: 2.5rem; } }
+    header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    header img { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; }
+    header h1 { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    @media (min-width: 640px) {
+      header img { width: 3.5rem; height: 3.5rem; }
+      header h1 { font-size: 1.5rem; }
+    }
+    section { margin-bottom: 0.75rem; }
+    /* Grid rows */
+    body > div > div.grid { display: grid; gap: 0.75rem; margin-bottom: 0.75rem; }
+    @media (min-width: 640px) {
+      body > div > div.grid { gap: 1.5rem; margin-bottom: 1.5rem; }
+      body > div > div.grid.sm\:grid-cols-2, body > div > div[class*="sm:grid-cols-2"] { grid-template-columns: 1fr 1fr; }
+    }
+    .kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 0.75rem; row-gap: 0.4rem; align-items: baseline; }
+    .kv dt { color: rgb(107 114 128); white-space: nowrap; }
+    .dark .kv dt { color: rgb(156 163 175); }
+    .kv dd { font-weight: 500; word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+    /* On very narrow screens stack the label above the value for readability */
+    @media (max-width: 480px) {
+      .kv { grid-template-columns: minmax(0, 1fr); row-gap: 0.15rem; }
+      .kv dt { font-size: 0.75rem; margin-top: 0.4rem; }
+      .kv dt:first-child { margin-top: 0; }
+      .kv dd { padding-left: 0; }
+    }
+    /* Any long strings that shouldn't cause horizontal scroll */
+    code, pre { overflow-wrap: anywhere; word-break: break-word; }
+    .req-btn {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      background: rgb(59 130 246);
+      color: white;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .req-btn:hover { background: rgb(37 99 235); }
+    .req-btn:disabled { background: rgb(107 114 128); cursor: not-allowed; opacity: 0.6; }
+    .dark .req-btn { background: rgb(37 99 235); }
+    .dark .req-btn:hover { background: rgb(59 130 246); }
+    .upd-btn {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      background: rgb(16 185 129);
+      color: white;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .upd-btn:hover { background: rgb(5 150 105); }
+    .upd-btn:disabled { background: rgb(107 114 128); cursor: not-allowed; opacity: 0.6; }
+    .test-btn {
+      display: inline-block;
+      margin-left: 0.5rem;
+      padding: 0.15rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      background: rgb(249 115 22);
+      color: white;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .test-btn:hover { background: rgb(234 88 12); }
+    .test-btn:disabled { background: rgb(107 114 128); cursor: not-allowed; opacity: 0.6; }
+    .test-btn-lg {
+      padding: 0.6rem 1.5rem;
+      border-radius: 9999px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: rgb(249 115 22);
+      color: white;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .test-btn-lg:hover { background: rgb(234 88 12); }
+    .action-btn {
+      display: inline-block;
+      padding: 0.35rem 0.9rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      background: rgb(220 38 38);
+      color: white;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s;
+    }
+    .action-btn:hover { background: rgb(185 28 28); }
+    .action-btn:disabled { background: rgb(107 114 128); opacity: 0.6; cursor: not-allowed; }
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50; padding: 1rem;
+      /* Use dvh so mobile browser address bars don't clip the modal */
+      height: 100vh; height: 100dvh;
+    }
+    .modal-card {
+      background: white;
+      border-radius: 1.5rem;
+      padding: 2rem;
+      max-width: 42rem; width: 100%;
+      max-height: 90vh; max-height: 90dvh; overflow-y: auto;
+      overflow-x: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+      -webkit-overflow-scrolling: touch;
+    }
+    @media (max-width: 640px) {
+      .modal-backdrop { padding: 0.5rem; }
+      .modal-card { padding: 1.25rem; border-radius: 1rem; max-height: 95dvh; }
+    }
+    .dark .modal-card { background: rgb(23 23 23); color: rgb(243 244 246); }
+    .modal-select {
+      background: white; color: rgb(17 24 39);
+      border: 1px solid rgb(209 213 219);
+      border-radius: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      font-size: 0.875rem;
+      min-width: 0;
+      max-width: 100%;
+      flex: 1 1 auto;
+    }
+    .dark .modal-select { background: rgb(38 38 38); color: white; border-color: rgb(64 64 64); }
+    .preview-box {
+      background: black;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      margin-top: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 12rem;
+      max-width: 100%;
+    }
+    @media (min-width: 640px) { .preview-box { min-height: 16rem; } }
+    .preview-box video { width: 100%; max-width: 100%; max-height: 24rem; display: block; }
+    .mic-meter {
+      width: 100%; height: 1.5rem;
+      background: rgb(38 38 38);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      margin-top: 1rem;
+    }
+    .mic-meter-fill {
+      height: 100%;
+      background: linear-gradient(to right, rgb(34 197 94), rgb(234 179 8), rgb(239 68 68));
+      width: 0%;
+      transition: width 60ms linear;
+    }
+    .card { border-radius: 1rem; padding: 1.5rem; background: #f3f4f6; border: 1px solid #e5e7eb; }
+    .inner { border-radius: 0.75rem; padding: 1rem; font-size: 0.875rem; overflow-wrap: anywhere; background: #fff; border: 1px solid #e5e7eb; }
+    @media (prefers-color-scheme: dark) {
+      .card { background: #171717; border-color: #262626; }
+      .inner { background: #0a0a0a; border-color: #262626; color: #f3f4f6; }
+    }
+    h2 { font-size: 1.125rem; font-weight: 600; margin: 0 0 1rem 0; }
+    @media (max-width: 640px) {
+      .card { padding: 1rem; border-radius: 0.875rem; }
+      .inner { padding: 0.75rem; font-size: 0.8125rem; }
+    }
+
+/* Force the detector UI and its JSON panel onto the requested Helvetica stack. */
+html,
+body,
+body *,
+button,
+input,
+select,
+textarea,
+pre,
+code {
+  font-family: Helvetica, "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* Keep detector fields as real label/value rows even inside a narrow preview.
+   The reference file's <=480px fallback stacked dt/dd values while this page
+   remains in its two-card desktop grid, which caused the broken layout. */
+.kv {
+  display: grid !important;
+  grid-template-columns: max-content minmax(0, 1fr) !important;
+  column-gap: 0.75rem !important;
+  row-gap: 0.4rem !important;
+  align-items: baseline !important;
+}
+.kv > dt {
+  grid-column: 1 !important;
+  margin-top: 0 !important;
+  font-size: inherit !important;
+}
+.kv > dd {
+  grid-column: 2 !important;
+  margin: 0 !important;
+  padding-left: 0 !important;
+  min-width: 0 !important;
+}
+
+/* Render request controls as the detector's visible pill buttons in every
+   preview engine, including those that apply aggressive native button styles. */
+.req-btn,
+.upd-btn,
+.action-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-height: 1.55rem !important;
+  margin-left: 0.5rem !important;
+  padding: 0.15rem 0.6rem !important;
+  border: 0 !important;
+  border-radius: 9999px !important;
+  color: #fff !important;
+  font-size: 0.7rem !important;
+  font-weight: 500 !important;
+  line-height: 1.1 !important;
+  vertical-align: middle !important;
+  cursor: pointer !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+}
+.req-btn { background: rgb(59 130 246) !important; }
+.req-btn:hover { background: rgb(37 99 235) !important; }
+.upd-btn { background: rgb(16 185 129) !important; }
+.upd-btn:hover { background: rgb(5 150 105) !important; }
+.action-btn { background: rgb(220 38 38) !important; }
+.action-btn:hover { background: rgb(185 28 28) !important; }
+.req-btn:disabled,
+.upd-btn:disabled,
+.action-btn:disabled {
+  background: rgb(107 114 128) !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
