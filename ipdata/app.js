@@ -17,11 +17,15 @@ const runtimeConfig = globalThis.ROBO_NETWORK_CONFIG ?? {};
 const configuredMode = runtimeConfig.mode ?? 'auto';
 const configuredApiBase = normaliseConfiguredEndpoint(runtimeConfig.apiBase);
 const configuredPublicIpEndpoint = normaliseConfiguredEndpoint(runtimeConfig.publicIpEndpoint);
-const isGitHubPagesHost = /\.github\.io$/i.test(location.hostname);
-const isStaticDeployment = configuredMode === 'static'
-  || (configuredMode === 'auto' && isGitHubPagesHost);
-const hasServerApi = !isStaticDeployment;
 const hasPublicIpApi = Boolean(configuredPublicIpEndpoint);
+const isGitHubPagesHost = /\.github\.io$/i.test(location.hostname);
+const isLoopbackHost = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i.test(location.hostname);
+// A custom GitHub Pages domain does not end in github.io. When a public
+// Worker endpoint is configured, treat non-local auto deployments as static
+// rather than attempting unavailable same-origin Node routes.
+const isStaticDeployment = configuredMode === 'static'
+  || (configuredMode === 'auto' && (isGitHubPagesHost || (!isLoopbackHost && hasPublicIpApi && !configuredApiBase)));
+const hasServerApi = !isStaticDeployment;
 
 function normaliseConfiguredEndpoint(value) {
   if (typeof value !== 'string') return '';
@@ -36,7 +40,7 @@ function apiUrl(path) {
 
 function staticModeMessage() {
   if (hasPublicIpApi) {
-    return 'The Robo public IP API is configured. It can report the caller address; detailed IP data and latency still require a self-hosted Network API.';
+    return 'The Robo Cloudflare IP API is configured for public IP, available edge location/ASN data, and request timing.';
   }
   return configuredApiBase
     ? 'Static deployment is enabled. Switch runtime-config.js to api mode to use the configured API.'
@@ -215,34 +219,88 @@ function setGeolocationUnavailable(value = 'unavailable') {
   ].forEach((id) => set(id, value));
 }
 
+function textOrNull(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function countryName(countryCode) {
+  if (!/^[A-Z]{2}$/i.test(countryCode || '')) return null;
+  try {
+    return new Intl.DisplayNames([navigator.language || 'en'], { type: 'region' }).of(countryCode.toUpperCase()) || null;
+  } catch {
+    return countryCode.toUpperCase();
+  }
+}
+
 function formatCountry(record) {
   if (!record?.country) return 'unavailable';
-  return `${record.country}${record.countryCode ? ` (${record.countryCode})` : ''}`;
+  if (!record.countryCode || record.country === record.countryCode) return record.country;
+  return `${record.country} (${record.countryCode})`;
 }
 
 function publicIpApiProfile(payload) {
-  const ip = typeof payload?.ip === 'string' && payload.ip.trim() ? payload.ip.trim() : null;
+  const ip = textOrNull(payload?.ip);
   const family = payload?.version === 'IPv4' || payload?.version === 'IPv6' ? payload.version : null;
-  const scope = typeof payload?.scope === 'string' ? payload.scope : null;
+  const scope = textOrNull(payload?.scope);
+  const geo = payload?.geo && typeof payload.geo === 'object' ? payload.geo : {};
+  const edge = payload?.edge && typeof payload.edge === 'object' ? payload.edge : {};
+  const countryCode = textOrNull(geo.countryCode || geo.country)?.toUpperCase() || null;
+  const organisation = textOrNull(geo.organization || geo.asOrganization);
+  const asnNumber = numberOrNull(geo.asn);
+  const record = {
+    country: textOrNull(geo.countryName || geo.country) || countryName(countryCode) || countryCode,
+    countryCode,
+    region: textOrNull(geo.region),
+    city: textOrNull(geo.city),
+    postal: textOrNull(geo.postalCode || geo.postal),
+    latitude: numberOrNull(geo.latitude),
+    longitude: numberOrNull(geo.longitude),
+    isp: organisation,
+    organisation: null,
+    asn: asnNumber ? `AS${asnNumber}` : textOrNull(geo.asn),
+    timezone: textOrNull(geo.timezone),
+    continent: textOrNull(geo.continent),
+    regionCode: textOrNull(geo.regionCode),
+    colo: textOrNull(edge.colo),
+    metroCode: textOrNull(edge.metroCode)
+  };
+  const edgeDataAvailable = Object.values(record).some((value) => value !== null && value !== undefined && value !== '');
+  const checkedAt = textOrNull(payload?.observedAt) || new Date().toISOString();
+
   return {
     sourceType: 'public-ip-api',
-    checkedAt: payload?.observedAt || new Date().toISOString(),
+    checkedAt,
     observedIp: ip,
-    observedVia: 'Robo public IP API',
+    observedVia: textOrNull(payload?.observedVia) || 'Cloudflare Worker edge',
     address: {
       family,
       scope,
       publicRoutable: typeof payload?.isPublic === 'boolean' ? payload.isPublic : null
     },
-    serverRequest: null,
+    serverRequest: {
+      httpVersion: textOrNull(edge.httpProtocol),
+      encrypted: edge.tlsVersion ? true : null,
+      socketFamily: family,
+      receivedAt: checkedAt,
+      edge
+    },
+    edgeData: edge,
     publicIpEndpoint: configuredPublicIpEndpoint,
     offlineIpData: {
-      status: 'not available from IP echo API',
-      file: null,
-      message: 'The configured Robo IP API reports the caller address only; it does not provide ISP or IP geolocation data.',
-      recordCount: 0,
-      matched: false,
-      record: null
+      status: edgeDataAvailable ? 'Cloudflare edge metadata available' : 'Cloudflare edge IP API available',
+      file: edgeDataAvailable ? 'Cloudflare request.cf' : null,
+      message: edgeDataAvailable
+        ? 'Public IP, edge geolocation, ASN, organization, and connection metadata were returned by the Robo Cloudflare Worker.'
+        : 'The Robo Cloudflare Worker returned the caller address; edge geolocation fields were not provided for this request.',
+      recordCount: edgeDataAvailable ? 1 : 0,
+      matched: edgeDataAvailable,
+      record: edgeDataAvailable ? record : null
     }
   };
 }
@@ -285,31 +343,35 @@ function renderPublicProfile(profile) {
   const address = profile.address ?? {};
   const offline = profile.offlineIpData ?? {};
   const record = offline.record;
+  const fromPublicIpApi = profile.sourceType === 'public-ip-api';
   set('nw-ip', profile.observedIp || 'unavailable');
   renderPublicFamilyFields(profile);
   set('ip-family', address.family || 'unavailable');
   set('ip-scope', address.scope || 'unavailable');
   set('ip-via', profile.observedVia || 'unavailable');
   set('ip-data-file', offline.file || 'unavailable');
-  set('ip-data-match', offline.matched ? (record?.cidr || 'yes') : 'no');
-
-  const fromPublicIpApi = profile.sourceType === 'public-ip-api';
-  set('tr-server-http', fromPublicIpApi ? 'not provided by IP API' : (profile.serverRequest?.httpVersion || 'unknown'));
-  set('tr-server-encrypted', fromPublicIpApi ? 'API host managed' : yn(profile.serverRequest?.encrypted));
+  set('ip-data-match', fromPublicIpApi
+    ? (offline.matched ? 'Cloudflare edge metadata' : 'not provided')
+    : (offline.matched ? (record?.cidr || 'yes') : 'no'));
+  const edge = profile.edgeData ?? profile.serverRequest?.edge ?? {};
+  set('tr-server-http', fromPublicIpApi ? (profile.serverRequest?.httpVersion || 'Cloudflare edge') : (profile.serverRequest?.httpVersion || 'unknown'));
+  set('tr-server-encrypted', fromPublicIpApi
+    ? (edge.tlsVersion ? `yes (${edge.tlsVersion})` : 'Cloudflare managed')
+    : yn(profile.serverRequest?.encrypted));
   set('tr-seen', fromPublicIpApi ? formatDate(profile.checkedAt) : formatDate(profile.serverRequest?.receivedAt));
 
-  set('st-external', fromPublicIpApi ? 'Robo public IP API' : 'no');
-  set('st-ip-source', fromPublicIpApi ? 'caller request to Robo IP API' : 'self-hosted server request');
+  set('st-external', fromPublicIpApi ? 'Robo Cloudflare Worker' : 'no');
+  set('st-ip-source', fromPublicIpApi ? 'Cloudflare CF-Connecting-IP' : 'self-hosted server request');
   set('st-profile-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/profile');
   set('st-ipv4-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/ipv4');
   set('st-ipv6-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/ipv6');
-  set('st-latency-endpoint', fromPublicIpApi ? 'not provided by IP echo API' : '/api/network/ping');
+  set('st-latency-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/ping');
   set('st-data-status', offline.status || 'unknown');
   set('st-data-file', offline.file || 'not provided');
   set('st-record-count', offline.recordCount ?? 'unknown');
-  set('st-matched-cidr', record?.cidr || 'none');
-  set('st-data-family', fromPublicIpApi ? 'not provided' : 'IPv4 prefixes');
-  set('st-data-type', fromPublicIpApi ? 'caller IP echo JSON' : 'local JSON CIDR');
+  set('st-matched-cidr', fromPublicIpApi ? 'not applicable' : (record?.cidr || 'none'));
+  set('st-data-family', fromPublicIpApi ? 'IPv4 / IPv6 edge metadata' : 'IPv4 prefixes');
+  set('st-data-type', fromPublicIpApi ? 'Cloudflare request.cf' : 'local JSON CIDR');
   set('st-address-check', `${address.family || 'unknown'} / ${address.scope || 'unknown'}`);
   set('st-last-check', formatDate(profile.checkedAt));
 
@@ -325,11 +387,13 @@ function renderPublicProfile(profile) {
   set('ip-postal', record.postal || 'unavailable');
   set('ip-lat', record.latitude ?? 'unavailable');
   set('ip-lon', record.longitude ?? 'unavailable');
-  set('ip-org', [record.isp, record.organisation].filter(Boolean).join(' / ') || 'unavailable');
+  set('ip-org', [...new Set([record.isp, record.organisation].filter(Boolean))].join(' / ') || 'unavailable');
   set('ip-asn', record.asn || 'unavailable');
   set('ip-tz', record.timezone || 'unavailable');
   set('ip-match', record.timezone ? yn(record.timezone === currentTimezone()) : 'unknown');
-  set('offline-note', `${offline.message} Matched local record: ${record.cidr || 'unknown prefix'}.`);
+  set('offline-note', fromPublicIpApi
+    ? offline.message
+    : `${offline.message} Matched local record: ${record.cidr || 'unknown prefix'}.`);
 }
 
 function renderStaticMode() {
@@ -668,16 +732,22 @@ function median(values) {
 
 async function pingSample() {
   const started = performance.now();
-  const data = await fetchServerJson(`/api/network/ping?nonce=${encodeURIComponent(`${Date.now()}-${Math.random()}`)}`);
+  const data = hasServerApi
+    ? await fetchServerJson(`/api/network/ping?nonce=${encodeURIComponent(`${Date.now()}-${Math.random()}`)}`)
+    : await fetchPublicIpJson();
   return {
     milliseconds: Math.round((performance.now() - started) * 10) / 10,
-    serverTime: data.serverTime,
-    serverRequest: data.serverRequest
+    serverTime: data.serverTime || data.observedAt || null,
+    serverRequest: data.serverRequest || {
+      httpVersion: data?.edge?.httpProtocol || null,
+      encrypted: data?.edge?.tlsVersion ? true : null,
+      receivedAt: data.observedAt || null
+    }
   };
 }
 
 async function requestLatency() {
-  if (!hasServerApi) {
+  if (!hasServerApi && !hasPublicIpApi) {
     state.latency = { status: 'unavailable', reason: staticModeMessage() };
     set('tm-latest-rtt', 'requires API');
     set('tm-median-rtt', 'requires API');
