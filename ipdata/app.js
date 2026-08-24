@@ -14,9 +14,13 @@ const state = {
 };
 
 const runtimeConfig = globalThis.ROBO_NETWORK_CONFIG ?? {};
+const DEFAULT_PUBLIC_IP_ENDPOINT = 'https://api.robo-universe.com/ipdata';
 const configuredMode = runtimeConfig.mode ?? 'auto';
 const configuredApiBase = normaliseConfiguredEndpoint(runtimeConfig.apiBase);
-const configuredPublicIpEndpoint = normaliseConfiguredEndpoint(runtimeConfig.publicIpEndpoint);
+// A Pages branch can omit runtime-config.js. Keep the deployed Worker usable in
+// that case instead of falling back to nonexistent same-origin API routes.
+const configuredPublicIpEndpoint = normaliseConfiguredEndpoint(runtimeConfig.publicIpEndpoint)
+  || DEFAULT_PUBLIC_IP_ENDPOINT;
 const hasPublicIpApi = Boolean(configuredPublicIpEndpoint);
 const isGitHubPagesHost = /\.github\.io$/i.test(location.hostname);
 const isLoopbackHost = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i.test(location.hostname);
@@ -40,7 +44,7 @@ function apiUrl(path) {
 
 function staticModeMessage() {
   if (hasPublicIpApi) {
-    return 'The Robo Cloudflare IP API is configured for public IP, available edge location/ASN data, and request timing.';
+    return 'The Robo IP Data API is configured for public IP, server-observed details, and request timing.';
   }
   return configuredApiBase
     ? 'Static deployment is enabled. Switch runtime-config.js to api mode to use the configured API.'
@@ -245,11 +249,29 @@ function formatCountry(record) {
 }
 
 function publicIpApiProfile(payload) {
+  const returnedDetails = payload?.allDetails && typeof payload.allDetails === 'object'
+    ? payload.allDetails
+    : null;
+  const serverProfile = returnedDetails?.serverObservedPublicAddress;
+
+  // The Robo IP Data API returns this exact profile for every caller. Preserve
+  // it as-is so the All Details panel includes the API's returned JSON.
+  if (serverProfile && typeof serverProfile === 'object') {
+    return {
+      ...serverProfile,
+      sourceType: 'public-ip-api',
+      observedIp: serverProfile.observedIp || textOrNull(payload?.ip),
+      observedVia: serverProfile.observedVia || textOrNull(payload?.observedVia) || 'Robo IP Data API request',
+      publicIpEndpoint: configuredPublicIpEndpoint,
+      apiAllDetails: returnedDetails
+    };
+  }
+
   const ip = textOrNull(payload?.ip);
   const family = payload?.version === 'IPv4' || payload?.version === 'IPv6' ? payload.version : null;
   const scope = textOrNull(payload?.scope);
   const geo = payload?.geo && typeof payload.geo === 'object' ? payload.geo : {};
-  const edge = payload?.edge && typeof payload.edge === 'object' ? payload.edge : {};
+  const transport = payload?.transport && typeof payload.transport === 'object' ? payload.transport : {};
   const countryCode = textOrNull(geo.countryCode || geo.country)?.toUpperCase() || null;
   const organisation = textOrNull(geo.organization || geo.asOrganization);
   const asnNumber = numberOrNull(geo.asn);
@@ -264,56 +286,68 @@ function publicIpApiProfile(payload) {
     isp: organisation,
     organisation: null,
     asn: asnNumber ? `AS${asnNumber}` : textOrNull(geo.asn),
-    timezone: textOrNull(geo.timezone),
-    continent: textOrNull(geo.continent),
-    regionCode: textOrNull(geo.regionCode),
-    colo: textOrNull(edge.colo),
-    metroCode: textOrNull(edge.metroCode)
+    timezone: textOrNull(geo.timezone)
   };
-  const edgeDataAvailable = Object.values(record).some((value) => value !== null && value !== undefined && value !== '');
+  const metadataAvailable = Object.values(record).some((value) => value !== null && value !== undefined && value !== '');
   const checkedAt = textOrNull(payload?.observedAt) || new Date().toISOString();
 
   return {
     sourceType: 'public-ip-api',
     checkedAt,
     observedIp: ip,
-    observedVia: textOrNull(payload?.observedVia) || 'Cloudflare Worker edge',
+    observedVia: textOrNull(payload?.observedVia) || 'Robo IP Data API request',
     address: {
       family,
       scope,
       publicRoutable: typeof payload?.isPublic === 'boolean' ? payload.isPublic : null
     },
-    serverRequest: {
-      httpVersion: textOrNull(edge.httpProtocol),
-      encrypted: edge.tlsVersion ? true : null,
+    serverRequest: payload?.serverRequest || {
+      httpVersion: textOrNull(transport.httpProtocol),
+      encrypted: transport.encrypted ?? null,
       socketFamily: family,
-      receivedAt: checkedAt,
-      edge
+      receivedAt: checkedAt
     },
-    edgeData: edge,
     publicIpEndpoint: configuredPublicIpEndpoint,
+    apiAllDetails: returnedDetails,
     offlineIpData: {
-      status: edgeDataAvailable ? 'Cloudflare edge metadata available' : 'Cloudflare edge IP API available',
-      file: edgeDataAvailable ? 'Cloudflare request.cf' : null,
-      message: edgeDataAvailable
-        ? 'Public IP, edge geolocation, ASN, organization, and connection metadata were returned by the Robo Cloudflare Worker.'
-        : 'The Robo Cloudflare Worker returned the caller address; edge geolocation fields were not provided for this request.',
-      recordCount: edgeDataAvailable ? 1 : 0,
-      matched: edgeDataAvailable,
-      record: edgeDataAvailable ? record : null
+      status: metadataAvailable ? 'API metadata available' : 'IP API available',
+      file: metadataAvailable ? 'API response' : null,
+      message: metadataAvailable
+        ? 'Public IP and API metadata were returned by the Robo IP Data API.'
+        : 'The Robo IP Data API returned the caller address; no optional IP metadata was provided.',
+      recordCount: metadataAvailable ? 1 : 0,
+      matched: metadataAvailable,
+      record: metadataAvailable ? record : null
     }
   };
 }
 
-async function fetchPublicIpJson() {
+async function fetchPublicIpJson({ sendAllDetails = false } = {}) {
   if (!hasPublicIpApi) throw new Error('No public IP API is configured.');
   const url = configuredPublicIpEndpoint;
   const sameOrigin = new URL(url, location.href).origin === location.origin;
-  const response = await fetch(url, {
+  const request = {
     cache: 'no-store',
     credentials: sameOrigin ? 'same-origin' : 'omit',
     headers: { accept: 'application/json' }
-  });
+  };
+
+  if (sendAllDetails) {
+    request.method = 'POST';
+    request.headers['content-type'] = 'application/json';
+    // Do not include a prior API echo inside the next submitted payload.
+    request.body = JSON.stringify({ allDetails: buildAllData({ includeApiReturnedDetails: false }) });
+  }
+
+  let response = await fetch(url, request);
+  // The IP remains useful even if a caller's optional details JSON is too large.
+  if (sendAllDetails && response.status === 413) {
+    response = await fetch(url, {
+      cache: 'no-store',
+      credentials: sameOrigin ? 'same-origin' : 'omit',
+      headers: { accept: 'application/json' }
+    });
+  }
   const data = await response.json().catch(() => null);
   if (!response.ok || !data) throw new Error(`Public IP request failed: ${response.status}`);
   return data;
@@ -351,17 +385,14 @@ function renderPublicProfile(profile) {
   set('ip-via', profile.observedVia || 'unavailable');
   set('ip-data-file', offline.file || 'unavailable');
   set('ip-data-match', fromPublicIpApi
-    ? (offline.matched ? 'Cloudflare edge metadata' : 'not provided')
+    ? (offline.matched ? 'API metadata' : 'not provided')
     : (offline.matched ? (record?.cidr || 'yes') : 'no'));
-  const edge = profile.edgeData ?? profile.serverRequest?.edge ?? {};
-  set('tr-server-http', fromPublicIpApi ? (profile.serverRequest?.httpVersion || 'Cloudflare edge') : (profile.serverRequest?.httpVersion || 'unknown'));
-  set('tr-server-encrypted', fromPublicIpApi
-    ? (edge.tlsVersion ? `yes (${edge.tlsVersion})` : 'Cloudflare managed')
-    : yn(profile.serverRequest?.encrypted));
+  set('tr-server-http', fromPublicIpApi ? (profile.serverRequest?.httpVersion || 'API server') : (profile.serverRequest?.httpVersion || 'unknown'));
+  set('tr-server-encrypted', yn(profile.serverRequest?.encrypted));
   set('tr-seen', fromPublicIpApi ? formatDate(profile.checkedAt) : formatDate(profile.serverRequest?.receivedAt));
 
-  set('st-external', fromPublicIpApi ? 'Robo Cloudflare Worker' : 'no');
-  set('st-ip-source', fromPublicIpApi ? 'Cloudflare CF-Connecting-IP' : 'self-hosted server request');
+  set('st-external', fromPublicIpApi ? 'Robo IP Data API' : 'no');
+  set('st-ip-source', fromPublicIpApi ? 'API-observed caller request' : 'self-hosted server request');
   set('st-profile-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/profile');
   set('st-ipv4-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/ipv4');
   set('st-ipv6-endpoint', fromPublicIpApi ? (profile.publicIpEndpoint || 'not configured') : '/api/network/ipv6');
@@ -370,8 +401,8 @@ function renderPublicProfile(profile) {
   set('st-data-file', offline.file || 'not provided');
   set('st-record-count', offline.recordCount ?? 'unknown');
   set('st-matched-cidr', fromPublicIpApi ? 'not applicable' : (record?.cidr || 'none'));
-  set('st-data-family', fromPublicIpApi ? 'IPv4 / IPv6 edge metadata' : 'IPv4 prefixes');
-  set('st-data-type', fromPublicIpApi ? 'Cloudflare request.cf' : 'local JSON CIDR');
+  set('st-data-family', fromPublicIpApi ? 'API request metadata' : 'IPv4 prefixes');
+  set('st-data-type', fromPublicIpApi ? 'Robo IP Data API JSON' : 'local JSON CIDR');
   set('st-address-check', `${address.family || 'unknown'} / ${address.scope || 'unknown'}`);
   set('st-last-check', formatDate(profile.checkedAt));
 
@@ -458,7 +489,7 @@ async function refreshPublicProfile() {
     renderStaticMode();
     set('nw-ip', 'checking…');
     try {
-      const profile = publicIpApiProfile(await fetchPublicIpJson());
+      const profile = publicIpApiProfile(await fetchPublicIpJson({ sendAllDetails: true }));
       state.publicProfile = profile;
       state.publicProfileError = null;
       renderPublicProfile(profile);
@@ -806,7 +837,7 @@ async function updateGeolocationPermission() {
   set('ln-geo-permission', state.geolocationPermission);
 }
 
-function buildAllData() {
+function buildAllData({ includeApiReturnedDetails = true } = {}) {
   return {
     generatedAt: new Date().toISOString(),
     application: 'Robo Network Finder',
@@ -834,6 +865,7 @@ function buildAllData() {
       status: state.publicProfileError ? 'unavailable' : 'checking',
       error: state.publicProfileError
     },
+    apiReturnedAllDetails: includeApiReturnedDetails ? (state.publicProfile?.apiAllDetails ?? null) : null,
     explicitPublicAddressChecks: state.familyChecks,
     sameOriginLatency: state.latency,
     optionalLocalNetworkCandidates: state.localCandidates,
