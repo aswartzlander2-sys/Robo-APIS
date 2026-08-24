@@ -1,7 +1,7 @@
-# Place this on the host serving apis.robo-universe.com.
+# Place this on the host serving api.robo-universe.com.
+# Keep apis.robo-universe.com assigned to GitHub Pages.
 # Start the Node application with HOST=127.0.0.1 and TRUST_PROXY=true.
-# Caddy preserves /ipdata and passes the trusted client address in X-Forwarded-For.
 
-apis.robo-universe.com {
+api.robo-universe.com {
     reverse_proxy 127.0.0.1:3000
 }
