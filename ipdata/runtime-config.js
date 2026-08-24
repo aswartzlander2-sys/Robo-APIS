@@ -1,7 +1,8 @@
 // GitHub Pages /ipdata deployment configuration.
-// The Cloudflare Worker receives the visitor request and returns real IP data.
+// The page calls its own hostname; Cloudflare routes the no-slash /ipdata API
+// request to the Worker while GitHub Pages continues serving /ipdata/.
 window.ROBO_NETWORK_CONFIG = Object.freeze({
   mode: 'static',
   apiBase: '',
-  publicIpEndpoint: 'https://ipdata.swartzlander.workers.dev/ipdata'
+  publicIpEndpoint: '/ipdata'
 });
