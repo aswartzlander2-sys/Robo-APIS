@@ -1,7 +1,8 @@
-# Place this on the host serving api.robo-universe.com.
-# Keep apis.robo-universe.com assigned to GitHub Pages.
-# Start the Node application with HOST=127.0.0.1 and TRUST_PROXY=true.
+# Host the normal page and JSON API on the same domain without Cloudflare.
+# https://apis.robo-universe.com/ipdata   -> JSON IP API
+# https://apis.robo-universe.com/ipdata/  -> normal Robo Network Finder page
+# Start Node with HOST=127.0.0.1 and TRUST_PROXY=true.
 
-api.robo-universe.com {
+apis.robo-universe.com {
     reverse_proxy 127.0.0.1:3000
 }
