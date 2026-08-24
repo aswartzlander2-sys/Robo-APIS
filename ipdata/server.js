@@ -25,6 +25,7 @@ const ALLOWED_ORIGINS = new Set(
 const PUBLIC_IP_API_ENABLED = process.env.PUBLIC_IP_API_ENABLED !== 'false';
 const PUBLIC_IP_RATE_LIMIT = Math.max(1, Number.parseInt(process.env.PUBLIC_IP_RATE_LIMIT ?? '120', 10) || 120);
 const PUBLIC_IP_RATE_WINDOW_MS = 60_000;
+const PUBLIC_IP_DETAILS_MAX_BYTES = Math.max(1_024, Number.parseInt(process.env.PUBLIC_IP_DETAILS_MAX_BYTES ?? '65536', 10) || 65_536);
 const PUBLIC_IP_API_PATH = normalisePublicApiPath(process.env.PUBLIC_IP_API_PATH ?? '/ipdata');
 const PUBLIC_IP_API_HEALTH_PATH = `${PUBLIC_IP_API_PATH}/health`;
 const LEGACY_PUBLIC_IP_API_PATH = '/api/v1/ip';
@@ -99,8 +100,8 @@ function setCorsHeaders(request, response, { publicApi = false } = {}) {
     // The public echo endpoint intentionally supports browser calls from any
     // origin. It returns only the caller's own address, never a queried target.
     response.setHeader('access-control-allow-origin', '*');
-    response.setHeader('access-control-allow-methods', 'GET, OPTIONS');
-    response.setHeader('access-control-allow-headers', 'Accept');
+    response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+    response.setHeader('access-control-allow-headers', 'Accept, Content-Type');
     response.setHeader('access-control-expose-headers', 'RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Retry-After');
     response.setHeader('cross-origin-resource-policy', 'cross-origin');
     return;
@@ -276,21 +277,72 @@ function setRateLimitHeaders(response, rate) {
   response.setHeader('ratelimit-reset', String(rate.retryAfterSeconds));
 }
 
-function publicIpPayload(request) {
-  const client = getClientIp(request, TRUST_PROXY);
-  const address = classifyIp(client.ip);
+async function readPublicDetails(request) {
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > PUBLIC_IP_DETAILS_MAX_BYTES) {
+      const error = new Error(`Request body exceeds the ${PUBLIC_IP_DETAILS_MAX_BYTES}-byte limit.`);
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(chunk);
+  }
+
+  if (!chunks.length) return null;
+  try {
+    const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    if (!value || typeof value !== 'object') {
+      const error = new Error('Submitted details must be a JSON object or array.');
+      error.statusCode = 400;
+      throw error;
+    }
+    // Both { allDetails: {...} } and a direct All Details JSON payload are supported.
+    return Object.hasOwn(value, 'allDetails') ? value.allDetails : value;
+  } catch (error) {
+    if (error.statusCode) throw error;
+    const invalid = new Error('Request body must be valid JSON.');
+    invalid.statusCode = 400;
+    throw invalid;
+  }
+}
+
+async function publicIpPayload(request, submittedDetails = null) {
+  const profile = await buildNetworkProfile(request);
+  const address = profile.address ?? {};
+  const allDetails = {
+    generatedAt: profile.checkedAt,
+    application: 'Robo IP Data API',
+    api: {
+      version: 'v1',
+      endpoint: PUBLIC_IP_API_PATH,
+      requestMethod: request.method,
+      detailsReturned: true,
+      submittedDetailsReturned: submittedDetails !== null,
+      submittedDetailsStored: false
+    },
+    serverObservedPublicAddress: profile,
+    clientSubmittedAllDetails: submittedDetails
+  };
+
   return {
-    ip: client.ip,
+    // Top-level values keep this compatible with ordinary IP-echo clients.
+    ip: profile.observedIp,
     version: address.family,
     scope: address.scope,
     isPublic: address.publicRoutable,
-    observedAt: new Date().toISOString(),
-    service: 'Robo Network Finder IP API',
-    apiVersion: 'v1'
+    observedAt: profile.checkedAt,
+    observedVia: profile.observedVia,
+    service: 'Robo IP Data API',
+    apiVersion: 'v1',
+    serverRequest: profile.serverRequest,
+    allDetails
   };
 }
 
-function handlePublicIpApi(request, response, url) {
+async function handlePublicIpApi(request, response, url) {
   if (!PUBLIC_IP_API_ENABLED) {
     sendJson(response, 404, { error: 'The public IP API is disabled.' });
     return;
@@ -309,8 +361,23 @@ function handlePublicIpApi(request, response, url) {
     return;
   }
 
-  const payload = publicIpPayload(request);
   const format = (url.searchParams.get('format') ?? 'json').toLowerCase();
+  if (request.method === 'POST' && format !== 'json') {
+    sendJson(response, 400, { error: 'POST responses use JSON.' });
+    return;
+  }
+
+  let submittedDetails = null;
+  if (request.method === 'POST') {
+    try {
+      submittedDetails = await readPublicDetails(request);
+    } catch (error) {
+      sendJson(response, error.statusCode ?? 400, { error: error.message || 'Invalid submitted details.' });
+      return;
+    }
+  }
+
+  const payload = await publicIpPayload(request, submittedDetails);
   if (format === 'plain' || format === 'text' || format === 'txt') {
     send(response, 200, payload.ip ?? '', { 'content-type': 'text/plain; charset=utf-8' });
     return;
@@ -335,7 +402,9 @@ function handlePublicApiHealth(_request, response) {
     status: 'ok',
     publicIpEndpoint: PUBLIC_IP_API_PATH,
     healthEndpoint: PUBLIC_IP_API_HEALTH_PATH,
-    formats: ['json', 'plain']
+    methods: ['GET', 'POST'],
+    formats: ['json', 'plain'],
+    postBehavior: 'Returns the caller IP and echoes submitted All Details JSON without storing it.'
   });
 }
 
@@ -368,13 +437,13 @@ const server = createServer(async (request, response) => {
   setCorsHeaders(request, response, { publicApi: isPublicIpApiRoute });
 
   if (request.method === 'OPTIONS' && (url.pathname.startsWith('/api/network/') || isPublicIpApiRoute)) {
-    send(response, 204, '', { allow: 'GET, OPTIONS' });
+    send(response, 204, '', { allow: isPublicIpEndpoint ? 'GET, POST, OPTIONS' : 'GET, OPTIONS' });
     return;
   }
 
   if (isPublicIpEndpoint) {
-    if (request.method !== 'GET') return send(response, 405, 'Method not allowed', { allow: 'GET, OPTIONS' });
-    handlePublicIpApi(request, response, url);
+    if (!['GET', 'POST'].includes(request.method ?? 'GET')) return send(response, 405, 'Method not allowed', { allow: 'GET, POST, OPTIONS' });
+    await handlePublicIpApi(request, response, url);
     return;
   }
 
