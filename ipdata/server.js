@@ -27,6 +27,7 @@ const PUBLIC_IP_RATE_LIMIT = Math.max(1, Number.parseInt(process.env.PUBLIC_IP_R
 const PUBLIC_IP_RATE_WINDOW_MS = 60_000;
 const PUBLIC_IP_DETAILS_MAX_BYTES = Math.max(1_024, Number.parseInt(process.env.PUBLIC_IP_DETAILS_MAX_BYTES ?? '65536', 10) || 65_536);
 const PUBLIC_IP_API_PATH = normalisePublicApiPath(process.env.PUBLIC_IP_API_PATH ?? '/ipdata');
+const PUBLIC_SITE_PATH = normalisePublicApiPath(process.env.PUBLIC_SITE_PATH ?? PUBLIC_IP_API_PATH);
 const PUBLIC_IP_API_HEALTH_PATH = `${PUBLIC_IP_API_PATH}/health`;
 const LEGACY_PUBLIC_IP_API_PATH = '/api/v1/ip';
 const LEGACY_PUBLIC_IP_API_HEALTH_PATH = '/api/v1/health';
@@ -59,6 +60,13 @@ function normalisePublicApiPath(value) {
 
 function pathMatches(pathname, endpoint) {
   return pathname === endpoint || pathname === `${endpoint}/`;
+}
+
+function staticPagePath(pathname) {
+  // Keep /ipdata (no slash) for the JSON API while /ipdata/ serves the UI.
+  if (pathname === `${PUBLIC_SITE_PATH}/`) return '/';
+  if (pathname.startsWith(`${PUBLIC_SITE_PATH}/`)) return pathname.slice(PUBLIC_SITE_PATH.length);
+  return pathname;
 }
 
 function send(response, status, body = '', headers = {}) {
@@ -409,7 +417,7 @@ function handlePublicApiHealth(_request, response) {
 }
 
 async function handleStatic(request, response, pathname) {
-  const descriptor = STATIC_FILES.get(pathname);
+  const descriptor = STATIC_FILES.get(staticPagePath(pathname));
   if (!descriptor) {
     send(response, 404, 'Not found');
     return;
@@ -429,8 +437,9 @@ async function handleStatic(request, response, pathname) {
 const server = createServer(async (request, response) => {
   setSecurityHeaders(response);
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
-  const isPublicIpEndpoint = pathMatches(url.pathname, PUBLIC_IP_API_PATH)
-    || pathMatches(url.pathname, LEGACY_PUBLIC_IP_API_PATH);
+  // /ipdata is the machine API. The trailing slash /ipdata/ is the UI.
+  const isPublicIpEndpoint = url.pathname === PUBLIC_IP_API_PATH
+    || url.pathname === LEGACY_PUBLIC_IP_API_PATH;
   const isPublicHealthEndpoint = pathMatches(url.pathname, PUBLIC_IP_API_HEALTH_PATH)
     || pathMatches(url.pathname, LEGACY_PUBLIC_IP_API_HEALTH_PATH);
   const isPublicIpApiRoute = isPublicIpEndpoint || isPublicHealthEndpoint;
