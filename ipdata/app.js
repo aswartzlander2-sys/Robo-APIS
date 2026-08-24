@@ -14,7 +14,7 @@ const state = {
 };
 
 const runtimeConfig = globalThis.ROBO_NETWORK_CONFIG ?? {};
-const DEFAULT_PUBLIC_IP_ENDPOINT = 'https://api.robo-universe.com/ipdata';
+const DEFAULT_PUBLIC_IP_ENDPOINT = 'https://apis.robo-universe.com/ipdata';
 const configuredMode = runtimeConfig.mode ?? 'auto';
 const configuredApiBase = normaliseConfiguredEndpoint(runtimeConfig.apiBase);
 // A Pages branch can omit runtime-config.js. Keep the deployed Worker usable in
