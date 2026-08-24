@@ -14,7 +14,7 @@ const state = {
 };
 
 const runtimeConfig = globalThis.ROBO_NETWORK_CONFIG ?? {};
-const DEFAULT_PUBLIC_IP_ENDPOINT = 'https://apis.robo-universe.com/ipdata';
+const DEFAULT_PUBLIC_IP_ENDPOINT = 'https://ipdata.swartzlander.workers.dev/ipdata';
 const configuredMode = runtimeConfig.mode ?? 'auto';
 const configuredApiBase = normaliseConfiguredEndpoint(runtimeConfig.apiBase);
 // A Pages branch can omit runtime-config.js. Keep the deployed Worker usable in
@@ -489,7 +489,7 @@ async function refreshPublicProfile() {
     renderStaticMode();
     set('nw-ip', 'checking…');
     try {
-      const profile = publicIpApiProfile(await fetchPublicIpJson({ sendAllDetails: true }));
+      const profile = publicIpApiProfile(await fetchPublicIpJson());
       state.publicProfile = profile;
       state.publicProfileError = null;
       renderPublicProfile(profile);
